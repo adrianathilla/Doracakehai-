@@ -1,0 +1,28 @@
+{
+  "products": [],
+  "categories": [],
+  "orders": [],
+  "customers": [],
+  "promotions": [],
+  "expenses": [],
+  "transactions": [],
+  "settings": {
+    "storeName": "DoraCake",
+    "fullName": "DoraCake Bakery & Pastry",
+    "address": "Jl. Kalibaru Barat",
+    "operationalHours": "Setiap hari 07.00–21.00 WIB",
+    "whatsappNumber": "+62 857-7368-0571",
+    "contactInfo": "WhatsApp Admin: +62 857-7368-0571 · Jl. Kalibaru Barat",
+    "minFreeShipping": 100000,
+    "defaultShippingCost": 15000,
+    "shippingRules": "Gratis ongkir untuk minimal pembelian Rp100.000 sesuai ketentuan area layanan. Ongkir di bawah minimum mengikuti jarak dan ketentuan admin.",
+    "pickupDeliveryStartHour": "08:00",
+    "pickupDeliveryEndHour": "18:00",
+    "cancellationPolicy": "Pembatalan pesanan hanya dapat dilakukan maksimal H-1 sebelum tanggal pengambilan atau pengiriman.",
+    "paymentInfoText": "Transfer Bank & QRIS resmi DoraCake setelah pesanan dikonfirmasi oleh admin toko via WhatsApp.",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "websiteHistory": [],
+  "activityLogs": [],
+  "lastSyncedAt": "2026-01-01T00:00:00.000Z"
+}

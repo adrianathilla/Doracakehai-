@@ -1,0 +1,546 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Admin or superadmin profile document verified via Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["SUPERADMIN", "ADMIN"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "role", "isActive", "createdAt"]
+    },
+    "AdminInvite": {
+      "title": "AdminInvite",
+      "description": "Pre-authorized admin email invitation created by SuperAdmin.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "name": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["SUPERADMIN", "ADMIN"] },
+        "isActive": { "type": "boolean" },
+        "invitedBy": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "role", "isActive", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Storefront bakery menu category.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 600 },
+        "imageUrl": { "type": "string", "maxLength": 750000 },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "description", "imageUrl", "sortOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Storefront bakery product with pricing, stock, stamp eligibility, and variants.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "productCode": { "type": "string", "maxLength": 40 },
+        "isStampEligible": { "type": "boolean" },
+        "name": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 2500 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "price": { "type": "number" },
+        "promoPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "isAvailable": { "type": "boolean" },
+        "imageUrl": { "type": "string", "maxLength": 750000 },
+        "isActive": { "type": "boolean" },
+        "isFavorite": { "type": "boolean" },
+        "isNewest": { "type": "boolean" },
+        "isBestSeller": { "type": "boolean" },
+        "variants": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "description", "categoryId", "price", "stock", "isAvailable", "imageUrl", "isActive", "isFavorite", "isNewest", "isBestSeller", "variants", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer or guest order record (contains phone & address).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "pattern": "^DC-\\d{8}-\\d{4}$", "maxLength": 32 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "authUid": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "customerPhone": { "type": "string", "maxLength": 32 },
+        "customerAddress": { "type": "string", "maxLength": 500 },
+        "deliveryMethod": { "type": "string", "enum": ["Antar", "Ambil"] },
+        "orderDate": { "type": "string", "maxLength": 20 },
+        "pickupDeliveryTime": { "type": "string", "maxLength": 20 },
+        "notes": { "type": "string", "maxLength": 600 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "voucherCode": { "type": "string", "maxLength": 40 },
+        "voucherDiscount": { "type": "number" },
+        "shippingCost": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 300 },
+        "paymentStatus": { "type": "string", "enum": ["Belum Dibayar", "Menunggu Verifikasi", "Lunas", "Dibatalkan"] },
+        "orderStatus": { "type": "string", "enum": ["Menunggu Konfirmasi", "Dikonfirmasi", "Sedang Diproses", "Siap Diambil", "Dalam Pengiriman", "Selesai", "Dibatalkan"] },
+        "isGuestOrder": { "type": "boolean" },
+        "rewardsGranted": { "type": "boolean" },
+        "stampGranted": { "type": "boolean" },
+        "sharedByCode": { "type": "string", "maxLength": 40 },
+        "sharedProductCode": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "orderNumber", "customerId", "authUid", "customerName", "customerPhone", "customerAddress", "deliveryMethod", "orderDate", "pickupDeliveryTime", "notes", "items", "subtotal", "shippingCost", "total", "paymentMethod", "paymentStatus", "orderStatus", "isGuestOrder", "rewardsGranted", "stampGranted", "createdAt", "updatedAt"]
+    },
+    "OrderTracking": {
+      "title": "OrderTracking",
+      "description": "Public non-PII order status lookup keyed by orderNumber.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "pattern": "^DC-\\d{8}-\\d{4}$", "maxLength": 32 },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "deliveryMethod": { "type": "string", "enum": ["Antar", "Ambil"] },
+        "orderDate": { "type": "string", "maxLength": 20 },
+        "pickupDeliveryTime": { "type": "string", "maxLength": 20 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "voucherCode": { "type": "string", "maxLength": 40 },
+        "voucherDiscount": { "type": "number" },
+        "shippingCost": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 300 },
+        "paymentStatus": { "type": "string", "enum": ["Belum Dibayar", "Menunggu Verifikasi", "Lunas", "Dibatalkan"] },
+        "orderStatus": { "type": "string", "enum": ["Menunggu Konfirmasi", "Dikonfirmasi", "Sedang Diproses", "Siap Diambil", "Dalam Pengiriman", "Selesai", "Dibatalkan"] },
+        "isGuestOrder": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "orderNumber", "customerName", "deliveryMethod", "orderDate", "pickupDeliveryTime", "items", "subtotal", "shippingCost", "total", "paymentMethod", "paymentStatus", "orderStatus", "isGuestOrder", "createdAt", "updatedAt"]
+    },
+    "CustomerAccount": {
+      "title": "CustomerAccount",
+      "description": "DoraCake Customer Club member profile (password managed exclusively by Firebase Auth).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "authUid": { "type": "string", "maxLength": 128 },
+        "authEmail": { "type": "string", "maxLength": 200 },
+        "email": { "type": "string", "maxLength": 200 },
+        "name": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "username": { "type": "string", "maxLength": 64 },
+        "mustChangePassword": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["Aktif", "Dibekukan", "Dinonaktifkan"] },
+        "tier": { "type": "string", "enum": ["Cakeers Member", "Cakeers Silver", "Cakeers Gold", "Cakeers Loyal"] },
+        "points": { "type": "number" },
+        "stamps": { "type": "number" },
+        "totalTransactions": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "referralCode": { "type": "string", "maxLength": 40 },
+        "referredByCode": { "type": "string", "maxLength": 40 },
+        "referralRewardClaimed": { "type": "boolean" },
+        "birthday": { "type": "string", "maxLength": 20 },
+        "fraudStatus": { "type": "string", "enum": ["Normal", "Perlu Ditinjau", "Dibatasi", "Dinonaktifkan"] },
+        "fraudReason": { "type": "string", "maxLength": 400 },
+        "simulatedDeviceId": { "type": "string", "maxLength": 120 },
+        "failedLoginAttempts": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "authUid", "authEmail", "name", "phone", "username", "mustChangePassword", "status", "tier", "points", "stamps", "totalTransactions", "totalSpent", "referralCode", "fraudStatus", "simulatedDeviceId", "failedLoginAttempts", "createdAt", "updatedAt"]
+    },
+    "CustomerLookup": {
+      "title": "CustomerLookup",
+      "description": "Non-PII username-to-Firebase-Auth-email mapping for username login.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 64 },
+        "authEmail": { "type": "string", "maxLength": 200 },
+        "customerId": { "type": "string", "maxLength": 64 },
+        "authUid": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["Aktif", "Dibekukan", "Dinonaktifkan"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "authEmail", "customerId", "authUid", "status", "updatedAt"]
+    },
+    "CustomerAuthMap": {
+      "title": "CustomerAuthMap",
+      "description": "Auth UID to customerId and verified phone lookup for rule authorization.",
+      "type": "object",
+      "properties": {
+        "authUid": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 64 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Aktif", "Dibekukan", "Dinonaktifkan"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authUid", "customerId", "phone", "status", "updatedAt"]
+    },
+    "CustomerPhoneIndex": {
+      "title": "CustomerPhoneIndex",
+      "description": "Phone uniqueness index preventing duplicate phone numbers.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "updatedAt"]
+    },
+    "PointRewardItem": {
+      "title": "PointRewardItem",
+      "description": "Redeemable point reward catalog item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 600 },
+        "pointsCost": { "type": "number" },
+        "rewardType": { "type": "string", "enum": ["discount_fixed", "free_product", "voucher"] },
+        "discountValue": { "type": "number" },
+        "voucherName": { "type": "string", "maxLength": 160 },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "title", "description", "pointsCost", "rewardType", "discountValue", "voucherName", "isActive"]
+    },
+    "StampRewardItem": {
+      "title": "StampRewardItem",
+      "description": "Redeemable stamp reward catalog item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 600 },
+        "stampsRequired": { "type": "number" },
+        "rewardType": { "type": "string", "enum": ["free_product", "discount_fixed"] },
+        "discountValue": { "type": "number" },
+        "productCode": { "type": "string", "maxLength": 40 },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "title", "description", "stampsRequired", "rewardType", "discountValue", "isActive"]
+    },
+    "PointHistoryItem": {
+      "title": "PointHistoryItem",
+      "description": "Customer point ledger entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 64 },
+        "authUid": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["Masuk", "Keluar"] },
+        "points": { "type": "number" },
+        "orderNumber": { "type": "string", "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerId", "authUid", "type", "points", "description", "createdAt"]
+    },
+    "StampHistoryItem": {
+      "title": "StampHistoryItem",
+      "description": "Customer stamp ledger entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 64 },
+        "authUid": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["Masuk", "Tukar"] },
+        "stampsDelta": { "type": "number" },
+        "orderNumber": { "type": "string", "maxLength": 32 },
+        "rewardTitle": { "type": "string", "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "customerId", "authUid", "type", "stampsDelta", "description", "createdAt"]
+    },
+    "Voucher": {
+      "title": "Voucher",
+      "description": "Public promotional voucher or personal member voucher.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 160 },
+        "code": { "type": "string", "maxLength": 40 },
+        "type": { "type": "string", "maxLength": 60 },
+        "discountType": { "type": "string", "enum": ["fixed", "percentage"] },
+        "discountValue": { "type": "number" },
+        "minPurchase": { "type": "number" },
+        "applicableProductCodes": { "type": "array" },
+        "quota": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "perUserLimit": { "type": "number" },
+        "validUntil": { "type": "string", "maxLength": 20 },
+        "isActive": { "type": "boolean" },
+        "assignedCustomerId": { "type": "string", "maxLength": 64 },
+        "assignedAuthUid": { "type": "string", "maxLength": 128 },
+        "usedByCustomerIds": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "code", "type", "discountType", "discountValue", "minPurchase", "applicableProductCodes", "quota", "usedCount", "perUserLimit", "validUntil", "isActive", "assignedCustomerId", "assignedAuthUid", "usedByCustomerIds", "createdAt"]
+    },
+    "PromoCampaign": {
+      "title": "PromoCampaign",
+      "description": "Promotional campaign banner.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 160 },
+        "subtitle": { "type": "string", "maxLength": 400 },
+        "badgeText": { "type": "string", "maxLength": 60 },
+        "promoCode": { "type": "string", "maxLength": 40 },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "isActive": { "type": "boolean" },
+        "targetAudience": { "type": "string", "enum": ["Semua Pelanggan", "Member Club", "Pelanggan Baru"] }
+      },
+      "required": ["id", "title", "subtitle", "badgeText", "startDate", "endDate", "isActive", "targetAudience"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Member referral conversion record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "referrerCustomerId": { "type": "string", "maxLength": 64 },
+        "referrerAuthUid": { "type": "string", "maxLength": 128 },
+        "referrerCode": { "type": "string", "maxLength": 40 },
+        "clicks": { "type": "number" },
+        "registeredCustomerId": { "type": "string", "maxLength": 64 },
+        "registeredCustomerName": { "type": "string", "maxLength": 120 },
+        "firstOrderNumber": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Klik Tercatat", "Terdaftar", "Berhasil", "Ditinjau"] },
+        "referrerRewardPoints": { "type": "number" },
+        "refereeRewardVoucherValue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "referrerCustomerId", "referrerAuthUid", "referrerCode", "clicks", "status", "referrerRewardPoints", "refereeRewardVoucherValue", "createdAt"]
+    },
+    "ReferralClick": {
+      "title": "ReferralClick",
+      "description": "Public non-PII referral link click counter.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 40 },
+        "clicks": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "clicks", "updatedAt"]
+    },
+    "ProductShareRecord": {
+      "title": "ProductShareRecord",
+      "description": "Product link sharing and conversion record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productCode": { "type": "string", "maxLength": 40 },
+        "productName": { "type": "string", "maxLength": 160 },
+        "senderCustomerId": { "type": "string", "maxLength": 64 },
+        "senderAuthUid": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 120 },
+        "referralCode": { "type": "string", "maxLength": 40 },
+        "clicks": { "type": "number" },
+        "purchases": { "type": "number" },
+        "totalSales": { "type": "number" },
+        "lastSharedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "productId", "productCode", "productName", "senderCustomerId", "senderAuthUid", "senderName", "referralCode", "clicks", "purchases", "totalSales", "lastSharedAt"]
+    },
+    "ProductShareClick": {
+      "title": "ProductShareClick",
+      "description": "Public non-PII product share link click counter.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productCode": { "type": "string", "maxLength": 40 },
+        "productName": { "type": "string", "maxLength": 160 },
+        "referralCode": { "type": "string", "maxLength": 40 },
+        "clicks": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "productId", "productCode", "productName", "referralCode", "clicks", "updatedAt"]
+    },
+    "FraudAlert": {
+      "title": "FraudAlert",
+      "description": "Security & anti-fraud alert entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerId": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "indicator": { "type": "string", "maxLength": 80 },
+        "reason": { "type": "string", "maxLength": 500 },
+        "severity": { "type": "string", "enum": ["Rendah", "Sedang", "Tinggi"] },
+        "status": { "type": "string", "enum": ["Normal", "Perlu Ditinjau", "Dibatasi", "Dinonaktifkan"] },
+        "simulatedDeviceNote": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "reviewedBy": { "type": "string", "maxLength": 120 }
+      },
+      "required": ["id", "customerId", "customerName", "indicator", "reason", "severity", "status", "simulatedDeviceNote", "createdAt"]
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Immutable Customer Club audit trail entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "actorRole": { "type": "string", "enum": ["Admin", "Pelanggan", "Sistem"] },
+        "activityType": { "type": "string", "maxLength": 60 },
+        "description": { "type": "string", "maxLength": 600 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorName", "actorRole", "activityType", "description", "createdAt"]
+    },
+    "AdminActivityLog": {
+      "title": "AdminActivityLog",
+      "description": "Immutable admin operations log.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "action": { "type": "string", "maxLength": 120 },
+        "target": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "actorName", "actorEmail", "action", "target", "createdAt"]
+    },
+    "WebsiteSnapshot": {
+      "title": "WebsiteSnapshot",
+      "description": "Published website configuration snapshot for rollback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "savedAt": { "type": "string", "format": "date-time" },
+        "savedBy": { "type": "string", "maxLength": 120 },
+        "note": { "type": "string", "maxLength": 300 },
+        "content": { "type": "object" }
+      },
+      "required": ["id", "savedAt", "savedBy", "note", "content"]
+    },
+    "SettingsDoc": {
+      "title": "SettingsDoc",
+      "description": "Configuration documents (public, websitePublished, websiteDraft, clubConfig).",
+      "type": "object"
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Store admin and superadmin accounts."
+    },
+    "/adminInvites/{email}": {
+      "schema": { "$ref": "#/entities/AdminInvite" },
+      "description": "Admin email invitations."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SettingsDoc" },
+      "description": "Store settings, published/draft website config, and club loyalty rules."
+    },
+    "/websiteHistory/{snapshotId}": {
+      "schema": { "$ref": "#/entities/WebsiteSnapshot" },
+      "description": "Website publish snapshots."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminActivityLog" },
+      "description": "Admin panel activity log."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Storefront menu categories."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Storefront bakery catalog products."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer and guest orders."
+    },
+    "/orderTracking/{orderNumber}": {
+      "schema": { "$ref": "#/entities/OrderTracking" },
+      "description": "Public non-PII order status lookup."
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/CustomerAccount" },
+      "description": "Customer Club member accounts."
+    },
+    "/customerLookups/{username}": {
+      "schema": { "$ref": "#/entities/CustomerLookup" },
+      "description": "Username to auth email mapping for login."
+    },
+    "/customerAuthMap/{authUid}": {
+      "schema": { "$ref": "#/entities/CustomerAuthMap" },
+      "description": "Auth UID to customerId and verified phone mapping."
+    },
+    "/customerPhoneIndex/{phoneKey}": {
+      "schema": { "$ref": "#/entities/CustomerPhoneIndex" },
+      "description": "Normalized phone uniqueness index."
+    },
+    "/pointRewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/PointRewardItem" },
+      "description": "Point redemption catalog."
+    },
+    "/stampRewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/StampRewardItem" },
+      "description": "Stamp redemption catalog."
+    },
+    "/pointHistory/{itemId}": {
+      "schema": { "$ref": "#/entities/PointHistoryItem" },
+      "description": "Customer point transaction history."
+    },
+    "/stampHistory/{itemId}": {
+      "schema": { "$ref": "#/entities/StampHistoryItem" },
+      "description": "Customer stamp transaction history."
+    },
+    "/vouchers/{voucherId}": {
+      "schema": { "$ref": "#/entities/Voucher" },
+      "description": "Promo and personal vouchers."
+    },
+    "/campaigns/{campaignId}": {
+      "schema": { "$ref": "#/entities/PromoCampaign" },
+      "description": "Customer Club promo campaigns."
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Referral registration and completion records."
+    },
+    "/referralClicks/{code}": {
+      "schema": { "$ref": "#/entities/ReferralClick" },
+      "description": "Public referral link click counter."
+    },
+    "/productShares/{shareId}": {
+      "schema": { "$ref": "#/entities/ProductShareRecord" },
+      "description": "Product share tracking and conversion records."
+    },
+    "/productShareClicks/{key}": {
+      "schema": { "$ref": "#/entities/ProductShareClick" },
+      "description": "Public product share link click counter."
+    },
+    "/fraudAlerts/{alertId}": {
+      "schema": { "$ref": "#/entities/FraudAlert" },
+      "description": "Security and anti-fraud alerts."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLogEntry" },
+      "description": "Customer Club audit logs."
+    }
+  }
+}

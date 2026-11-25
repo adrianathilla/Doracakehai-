@@ -42,6 +42,7 @@ export interface Product {
   price: number;
   promoPrice: number | null;
   stock: number;
+  soldCount?: number;
   isAvailable: boolean;
   imageUrl: string;
   isActive: boolean;
@@ -554,4 +555,21 @@ export interface ClubSimulationState {
   auditLogs: AuditLogEntry[];
   config: ClubConfig;
   currentDeviceId: string;
+}
+
+export type NotificationCategory = 'Promo' | 'Pesanan' | 'Hadiah' | 'Info Toko';
+export type NotificationTargetType = 'admin' | 'customer' | 'broadcast';
+
+export interface AppNotification {
+  id: string;
+  targetType: NotificationTargetType;
+  recipientCustomerId: string;
+  recipientAuthUid: string;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  senderName: string;
+  orderNumber?: string;
+  isRead: boolean;
+  createdAt: string;
 }

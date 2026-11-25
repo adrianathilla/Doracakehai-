@@ -44,6 +44,7 @@ import {
   AdminInvite,
   AdminRole,
   AdminUserPublic,
+  AppNotification,
   AuditLogEntry,
   CartItem,
   Category,
@@ -53,6 +54,7 @@ import {
   DeliveryMethod,
   FraudAlert,
   FraudStatus,
+  NotificationCategory,
   Order,
   OrderItem,
   OrderStatus,
@@ -766,6 +768,7 @@ export interface AdminFullSyncState {
   clubConfig: ClubConfig;
   adminUsers: AdminUserPublic[];
   adminInvites: AdminInvite[];
+  notifications: AppNotification[];
 }
 
 export function subscribeAdminData(
@@ -990,6 +993,18 @@ export function subscribeAdminData(
       },
     ),
   );
+  unsubs.push(
+    onSnapshot(
+      collection(db, 'notifications'),
+      (snap) =>
+        onUpdate({
+          notifications: snapToArray<AppNotification>(snap)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .slice(0, 250),
+        }),
+      (e) => onError?.(e),
+    ),
+  );
 
   return () => {
     unsubs.forEach((fn) => fn());
@@ -1163,6 +1178,40 @@ export async function createOrderFirebase(payload: {
     createdAt: serverTimestamp(),
   });
 
+  // Notifikasi otomatis ke Admin
+  const adminNotifId = makeId('ntf');
+  batch.set(doc(db, 'notifications', adminNotifId), {
+    id: adminNotifId,
+    targetType: 'admin',
+    recipientCustomerId: '',
+    recipientAuthUid: '',
+    title: `Pesanan Baru ${orderNumber}`,
+    message: `${payload.customerName.trim()} (${isGuestOrder ? 'Tamu' : customer?.id}) memesan ${orderItems.length} menu (${payload.deliveryMethod}) senilai Rp${total.toLocaleString('id-ID')}.`,
+    category: 'Pesanan',
+    senderName: payload.customerName.trim(),
+    orderNumber,
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
+
+  // Notifikasi otomatis ke Pelanggan Member
+  if (!isGuestOrder && customer && authUid) {
+    const custNotifId = makeId('ntf');
+    batch.set(doc(db, 'notifications', custNotifId), {
+      id: custNotifId,
+      targetType: 'customer',
+      recipientCustomerId: customer.id,
+      recipientAuthUid: authUid,
+      title: `Pesanan ${orderNumber} Diterima`,
+      message: `Pesanan senilai Rp${total.toLocaleString('id-ID')} sudah masuk dan menunggu konfirmasi Admin DoraCake.`,
+      category: 'Pesanan',
+      senderName: 'DoraCake',
+      orderNumber,
+      isRead: false,
+      createdAt: serverTimestamp(),
+    });
+  }
+
   try {
     await batch.commit();
   } catch (err) {
@@ -1266,6 +1315,36 @@ export async function claimGuestOrderFirebase(params: {
     actorRole: 'Pelanggan',
     activityType: 'Klaim Pesanan Tamu',
     description: `${customer.id} mengklaim pesanan tamu ${orderNum} ke akun member.`,
+    createdAt: serverTimestamp(),
+  });
+
+  const adminNotifId = makeId('ntf');
+  batch.set(doc(db, 'notifications', adminNotifId), {
+    id: adminNotifId,
+    targetType: 'admin',
+    recipientCustomerId: '',
+    recipientAuthUid: '',
+    title: `Klaim Pesanan Tamu ${orderNum}`,
+    message: `${customer.name} (${customer.id}) menghubungkan pesanan tamu ${orderNum} ke akun membernya.`,
+    category: 'Pesanan',
+    senderName: customer.name,
+    orderNumber: orderNum,
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
+
+  const custNotifId = makeId('ntf');
+  batch.set(doc(db, 'notifications', custNotifId), {
+    id: custNotifId,
+    targetType: 'customer',
+    recipientCustomerId: customer.id,
+    recipientAuthUid: authUid,
+    title: `Pesanan ${orderNum} Terhubung`,
+    message: `Pesanan tamu ${orderNum} berhasil ditautkan ke akun ${customer.id}.`,
+    category: 'Pesanan',
+    senderName: 'DoraCake',
+    orderNumber: orderNum,
+    isRead: false,
     createdAt: serverTimestamp(),
   });
 
@@ -1531,6 +1610,23 @@ export async function adminUpdateOrderStatusFirebase(params: {
     }
   }
 
+  // Tambah soldCount pada produk saat pesanan pertama kali tuntas (Selesai & Lunas)
+  if (isCompletedAndPaid && order.orderStatus !== 'Selesai') {
+    const qtyByProduct = new Map<string, number>();
+    for (const item of order.items) {
+      qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) || 0) + item.quantity);
+    }
+    for (const [productId, orderedQty] of qtyByProduct.entries()) {
+      const prod = products.find((p) => p.id === productId);
+      if (prod && orderedQty > 0) {
+        batch.update(doc(db, 'products', prod.id), {
+          soldCount: Math.max(0, Math.round(Number(prod.soldCount) || 0)) + orderedQty,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+  }
+
   batch.update(doc(db, 'orders', order.id), {
     orderStatus,
     paymentStatus,
@@ -1553,6 +1649,31 @@ export async function adminUpdateOrderStatusFirebase(params: {
     description: `Status pesanan ${order.orderNumber} diperbarui menjadi "${orderStatus}" (${paymentStatus}).`,
     createdAt: serverTimestamp(),
   });
+
+  // Notifikasi perubahan status pesanan ke pelanggan member
+  if (!order.isGuestOrder && order.customerId !== 'GUEST') {
+    const cust = customers.find((c) => c.id === order.customerId);
+    const targetAuthUid = cust?.authUid || order.authUid;
+    if (targetAuthUid && (orderStatus !== order.orderStatus || paymentStatus !== order.paymentStatus)) {
+      const ntfId = makeId('ntf');
+      const extraInfo = isCompletedAndPaid
+        ? ' Pesanan tuntas! Cek saldo poin & stempel Anda.'
+        : '';
+      batch.set(doc(db, 'notifications', ntfId), {
+        id: ntfId,
+        targetType: 'customer',
+        recipientCustomerId: order.customerId,
+        recipientAuthUid: targetAuthUid,
+        title: `Update Pesanan ${order.orderNumber}: ${orderStatus}`,
+        message: `Status pesanan menjadi "${orderStatus}" dengan pembayaran "${paymentStatus}".${extraInfo}`,
+        category: 'Pesanan',
+        senderName: actorName,
+        orderNumber: order.orderNumber,
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+    }
+  }
 
   await batch.commit();
 }
@@ -1625,6 +1746,34 @@ export async function redeemPointRewardFirebase(
     actorRole: 'Pelanggan',
     activityType: 'Penukaran Hadiah',
     description: `${customer.id} menukar ${reward.pointsCost} poin menjadi ${reward.title} (Voucher ${code}).`,
+    createdAt: serverTimestamp(),
+  });
+
+  const custNtf = makeId('ntf');
+  batch.set(doc(db, 'notifications', custNtf), {
+    id: custNtf,
+    targetType: 'customer',
+    recipientCustomerId: customer.id,
+    recipientAuthUid: authUid,
+    title: `Hadiah Poin Berhasil Ditukar`,
+    message: `${reward.pointsCost} poin ditukar menjadi voucher ${code} (${reward.title}). Siap dipakai saat checkout!`,
+    category: 'Hadiah',
+    senderName: 'DoraCake',
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
+
+  const adminNtf = makeId('ntf');
+  batch.set(doc(db, 'notifications', adminNtf), {
+    id: adminNtf,
+    targetType: 'admin',
+    recipientCustomerId: '',
+    recipientAuthUid: '',
+    title: `Penukaran Hadiah Poin`,
+    message: `${customer.name} (${customer.id}) menukar ${reward.pointsCost} poin untuk "${reward.title}" (Kode: ${code}).`,
+    category: 'Hadiah',
+    senderName: customer.name,
+    isRead: false,
     createdAt: serverTimestamp(),
   });
 
@@ -1701,6 +1850,34 @@ export async function redeemStampRewardFirebase(
     actorRole: 'Pelanggan',
     activityType: 'Penukaran Hadiah',
     description: `${customer.id} menukar ${required} stempel untuk "${reward.title}" (Voucher ${code}).`,
+    createdAt: serverTimestamp(),
+  });
+
+  const custNtf = makeId('ntf');
+  batch.set(doc(db, 'notifications', custNtf), {
+    id: custNtf,
+    targetType: 'customer',
+    recipientCustomerId: customer.id,
+    recipientAuthUid: authUid,
+    title: `Hadiah ${required} Stempel Siap Dipakai`,
+    message: `Selamat! Stempel Anda berhasil ditukar dengan "${reward.title}" (Kode Voucher: ${code}).`,
+    category: 'Hadiah',
+    senderName: 'DoraCake',
+    isRead: false,
+    createdAt: serverTimestamp(),
+  });
+
+  const adminNtf = makeId('ntf');
+  batch.set(doc(db, 'notifications', adminNtf), {
+    id: adminNtf,
+    targetType: 'admin',
+    recipientCustomerId: '',
+    recipientAuthUid: '',
+    title: `Penukaran Hadiah Stempel`,
+    message: `${customer.name} (${customer.id}) menukar ${required} stempel menjadi "${reward.title}" (Kode: ${code}).`,
+    category: 'Hadiah',
+    senderName: customer.name,
+    isRead: false,
     createdAt: serverTimestamp(),
   });
 
@@ -2174,6 +2351,29 @@ export async function adminAdjustCustomerRewardFirebase(
     updatedAt: serverTimestamp(),
   });
 
+  if (customer.authUid && (payload.pointsDelta !== 0 || payload.stampsDelta !== 0)) {
+    const custNtf = makeId('ntf');
+    const parts: string[] = [];
+    if (payload.pointsDelta !== 0) {
+      parts.push(`${payload.pointsDelta > 0 ? '+' : ''}${payload.pointsDelta} poin`);
+    }
+    if (payload.stampsDelta !== 0) {
+      parts.push(`${payload.stampsDelta > 0 ? '+' : ''}${payload.stampsDelta} stempel`);
+    }
+    batch.set(doc(db, 'notifications', custNtf), {
+      id: custNtf,
+      targetType: 'customer',
+      recipientCustomerId: customer.id,
+      recipientAuthUid: customer.authUid,
+      title: `Pembaruan Poin & Stempel`,
+      message: `Admin memperbarui saldo Anda (${parts.join(', ')}). Alasan: ${reason}`,
+      category: 'Hadiah',
+      senderName: actorName,
+      isRead: false,
+      createdAt: serverTimestamp(),
+    });
+  }
+
   await batch.commit();
 }
 
@@ -2238,6 +2438,10 @@ export async function upsertProductFirebase(
 ): Promise<string> {
   const id = editingId || makeId('prd');
   const stock = Math.max(0, Number(payload.stock) || 0);
+  const soldCount =
+    payload.soldCount !== undefined
+      ? Math.max(0, Math.round(Number(payload.soldCount) || 0))
+      : undefined;
   const promoVal =
     payload.promoPrice !== undefined && payload.promoPrice !== null && Number(payload.promoPrice) > 0
       ? Number(payload.promoPrice)
@@ -2253,6 +2457,7 @@ export async function upsertProductFirebase(
     price: Math.max(0, Number(payload.price) || 0),
     promoPrice: promoVal,
     stock,
+    ...(soldCount !== undefined ? { soldCount } : !editingId ? { soldCount: 0 } : {}),
     isAvailable: payload.isAvailable ?? stock > 0,
     imageUrl: payload.imageUrl || '',
     isActive: payload.isActive ?? true,
@@ -2374,21 +2579,30 @@ export async function saveVoucherFirebase(
   const assignedCust = voucher.assignedCustomerId
     ? customers.find((c) => c.id === voucher.assignedCustomerId)
     : undefined;
+  const cleanCode = voucher.code.trim().toUpperCase().replace(/\s+/g, '');
+  const cleanName = voucher.name.trim();
+  if (cleanName.length < 1 || cleanCode.length < 2) {
+    throw new Error('Nama voucher dan kode voucher (minimal 2 karakter) wajib diisi.');
+  }
+  const cleanDiscountValue =
+    voucher.discountType === 'percentage'
+      ? Math.min(100, Math.max(1, Number(voucher.discountValue) || 1))
+      : Math.min(10000000, Math.max(1, Number(voucher.discountValue) || 1));
 
   const docData = {
     id: vcId,
-    name: voucher.name.trim(),
-    code: voucher.code.trim().toUpperCase(),
+    name: cleanName.slice(0, 160),
+    code: cleanCode.slice(0, 40),
     type: voucher.type,
     discountType: voucher.discountType,
-    discountValue: Math.max(0, Number(voucher.discountValue) || 0),
-    minPurchase: Math.max(0, Number(voucher.minPurchase) || 0),
+    discountValue: cleanDiscountValue,
+    minPurchase: Math.min(100000000, Math.max(0, Number(voucher.minPurchase) || 0)),
     applicableProductCodes: Array.isArray(voucher.applicableProductCodes)
-      ? voucher.applicableProductCodes
+      ? voucher.applicableProductCodes.slice(0, 100)
       : [],
-    quota: Math.max(1, Number(voucher.quota) || 1),
+    quota: Math.min(1000000, Math.max(1, Number(voucher.quota) || 1)),
     usedCount: 0,
-    perUserLimit: Math.max(1, Number(voucher.perUserLimit) || 1),
+    perUserLimit: Math.min(10000, Math.max(1, Number(voucher.perUserLimit) || 1)),
     validUntil: voucher.validUntil,
     isActive: voucher.isActive,
     assignedCustomerId: assignedCust ? assignedCust.id : '',
@@ -2405,7 +2619,7 @@ export async function saveVoucherFirebase(
     actorName,
     actorRole: 'Admin',
     activityType: 'Pengaturan Sistem',
-    description: `Membuat voucher baru "${docData.code}" (${docData.type}).`,
+    description: `Membuat voucher baru "${docData.code}" (${docData.type})${assignedCust ? ` untuk ${assignedCust.id}` : ''}.`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
@@ -2413,6 +2627,212 @@ export async function saveVoucherFirebase(
 
 export async function toggleVoucherFirebase(voucher: Voucher): Promise<void> {
   await updateDoc(doc(db, 'vouchers', voucher.id), { isActive: !voucher.isActive });
+}
+
+export async function updateVoucherFirebase(
+  actorName: string,
+  existing: Voucher,
+  updates: {
+    name: string;
+    code: string;
+    type: Voucher['type'];
+    discountType: 'fixed' | 'percentage';
+    discountValue: number;
+    minPurchase: number;
+    applicableProductCodes: string[];
+    quota: number;
+    perUserLimit: number;
+    validUntil: string;
+    isActive: boolean;
+    assignedCustomerId?: string;
+  },
+  customers: CustomerAccount[],
+): Promise<void> {
+  const assignedCust = updates.assignedCustomerId
+    ? customers.find((c) => c.id === updates.assignedCustomerId)
+    : undefined;
+  const cleanCode = updates.code.trim().toUpperCase().replace(/\s+/g, '');
+  const cleanName = updates.name.trim();
+  if (cleanName.length < 1 || cleanCode.length < 2) {
+    throw new Error('Nama voucher dan kode voucher (minimal 2 karakter) wajib diisi.');
+  }
+  const cleanDiscountValue =
+    updates.discountType === 'percentage'
+      ? Math.min(100, Math.max(1, Number(updates.discountValue) || 1))
+      : Math.min(10000000, Math.max(1, Number(updates.discountValue) || 1));
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'vouchers', existing.id), {
+    name: cleanName.slice(0, 160),
+    code: cleanCode.slice(0, 40),
+    type: updates.type,
+    discountType: updates.discountType,
+    discountValue: cleanDiscountValue,
+    minPurchase: Math.min(100000000, Math.max(0, Number(updates.minPurchase) || 0)),
+    applicableProductCodes: Array.isArray(updates.applicableProductCodes)
+      ? updates.applicableProductCodes.slice(0, 100)
+      : [],
+    quota: Math.min(1000000, Math.max(Math.max(1, existing.usedCount || 0), Number(updates.quota) || 1)),
+    perUserLimit: Math.min(10000, Math.max(1, Number(updates.perUserLimit) || 1)),
+    validUntil: updates.validUntil,
+    isActive: Boolean(updates.isActive),
+    assignedCustomerId: assignedCust ? assignedCust.id : '',
+    assignedAuthUid: assignedCust?.authUid || '',
+  });
+
+  const audId = makeId('aud');
+  batch.set(doc(db, 'auditLogs', audId), {
+    id: audId,
+    actorName,
+    actorRole: 'Admin',
+    activityType: 'Pengaturan Sistem',
+    description: `Mengedit voucher "${existing.code}" -> "${cleanCode}" (${cleanName}).`,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function deleteVoucherFirebase(actorName: string, voucher: Voucher): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'vouchers', voucher.id));
+  const audId = makeId('aud');
+  batch.set(doc(db, 'auditLogs', audId), {
+    id: audId,
+    actorName,
+    actorRole: 'Admin',
+    activityType: 'Pengaturan Sistem',
+    description: `Menghapus voucher "${voucher.code}" (${voucher.name}).`,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function distributeVoucherToCustomersFirebase(params: {
+  actorName: string;
+  template: {
+    name: string;
+    code: string;
+    type: Voucher['type'];
+    discountType: 'fixed' | 'percentage';
+    discountValue: number;
+    minPurchase: number;
+    applicableProductCodes: string[];
+    validUntil: string;
+  };
+  targetCustomers: CustomerAccount[];
+  existingVouchers: Voucher[];
+}): Promise<Array<{ customer: CustomerAccount; code: string }>> {
+  const { actorName, template, targetCustomers, existingVouchers } = params;
+  if (targetCustomers.length === 0) {
+    throw new Error('Pilih minimal 1 pelanggan untuk dikirimi voucher.');
+  }
+  const cleanBaseCode = template.code.trim().toUpperCase().replace(/\s+/g, '');
+  const cleanName = template.name.trim();
+  if (cleanName.length < 1 || cleanBaseCode.length < 2) {
+    throw new Error('Nama voucher dan kode voucher dasar (minimal 2 karakter) wajib diisi.');
+  }
+  const cleanDiscountValue =
+    template.discountType === 'percentage'
+      ? Math.min(100, Math.max(1, Number(template.discountValue) || 1))
+      : Math.min(10000000, Math.max(1, Number(template.discountValue) || 1));
+
+  const usedCodes = new Set(existingVouchers.map((v) => v.code.toUpperCase()));
+  const prefix = cleanBaseCode.slice(0, 26);
+
+  const sentResults: Array<{ customer: CustomerAccount; code: string }> = [];
+  const docPayloads: Array<{ id: string; data: Record<string, unknown> }> = [];
+
+  for (const cust of targetCustomers) {
+    const shortId = cust.id.replace(/[^A-Z0-9]/gi, '').slice(-6) || makeId('U').slice(-4);
+    let candidate = `${prefix}-${shortId}`.slice(0, 40);
+    let attempt = 0;
+    while (usedCodes.has(candidate)) {
+      attempt += 1;
+      const suffix = String(Math.floor(10 + Math.random() * 89));
+      candidate = `${prefix.slice(0, 22)}-${shortId}-${suffix}`.slice(0, 40);
+      if (attempt > 25) {
+        candidate = `${prefix.slice(0, 18)}-${Date.now().toString().slice(-6)}`.slice(0, 40);
+      }
+    }
+    usedCodes.add(candidate);
+
+    const vcId = makeId('vc');
+    docPayloads.push({
+      id: vcId,
+      data: {
+        id: vcId,
+        name: cleanName.slice(0, 160),
+        code: candidate,
+        type: template.type,
+        discountType: template.discountType,
+        discountValue: cleanDiscountValue,
+        minPurchase: Math.min(100000000, Math.max(0, Number(template.minPurchase) || 0)),
+        applicableProductCodes: Array.isArray(template.applicableProductCodes)
+          ? template.applicableProductCodes.slice(0, 100)
+          : [],
+        quota: 1,
+        usedCount: 0,
+        perUserLimit: 1,
+        validUntil: template.validUntil,
+        isActive: true,
+        assignedCustomerId: cust.id,
+        assignedAuthUid: cust.authUid || '',
+        usedByCustomerIds: {},
+        createdAt: serverTimestamp(),
+      },
+    });
+    sentResults.push({ customer: cust, code: candidate });
+  }
+
+  // Commit in chunks of 200 (voucher + notif = 2 ops per customer) to stay safely within Firestore 500-op batch limit
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < docPayloads.length; i += CHUNK_SIZE) {
+    const chunk = docPayloads.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    for (const item of chunk) {
+      batch.set(doc(db, 'vouchers', item.id), item.data);
+      const authUid = String(item.data.assignedAuthUid || '');
+      const custId = String(item.data.assignedCustomerId || '');
+      const voucherCode = String(item.data.code || '');
+      if (authUid && custId) {
+        const ntfId = makeId('ntf');
+        const discountLabel =
+          template.discountType === 'percentage'
+            ? `${cleanDiscountValue}%`
+            : `Rp${cleanDiscountValue.toLocaleString('id-ID')}`;
+        batch.set(doc(db, 'notifications', ntfId), {
+          id: ntfId,
+          targetType: 'customer',
+          recipientCustomerId: custId,
+          recipientAuthUid: authUid,
+          title: `Kamu Dapat Voucher: ${cleanName}`,
+          message: `Admin mengirim voucher spesial kode ${voucherCode} (potongan ${discountLabel}, berlaku s.d. ${template.validUntil}). Cek tab Voucher Saya!`,
+          category: 'Promo',
+          senderName: actorName,
+          isRead: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
+    if (i + CHUNK_SIZE >= docPayloads.length) {
+      const audId = makeId('aud');
+      const custPreview = sentResults
+        .slice(0, 5)
+        .map((s) => s.customer.id)
+        .join(', ');
+      batch.set(doc(db, 'auditLogs', audId), {
+        id: audId,
+        actorName,
+        actorRole: 'Admin',
+        activityType: 'Pengaturan Sistem',
+        description: `Mengirim voucher "${cleanName}" (${cleanBaseCode}) ke ${sentResults.length} pelanggan (${custPreview}${sentResults.length > 5 ? ', ...' : ''}).`,
+        createdAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  return sentResults;
 }
 
 export async function saveCampaignFirebase(
@@ -2870,3 +3290,169 @@ export async function restoreFirebaseBackup(
 
   await batch.commit();
 }
+
+// ==========================================================
+// REAL-TIME NOTIFICATIONS (CUSTOMER & ADMIN)
+// ==========================================================
+
+export function subscribeCustomerNotifications(
+  authUid: string,
+  onUpdate: (notifications: AppNotification[]) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  let personalList: AppNotification[] = [];
+  let broadcastList: AppNotification[] = [];
+
+  const emitMerged = () => {
+    const map = new Map<string, AppNotification>();
+    for (const item of personalList) map.set(item.id, item);
+    for (const item of broadcastList) {
+      if (!map.has(item.id)) map.set(item.id, item);
+    }
+    const merged = [...map.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 120);
+    onUpdate(merged);
+  };
+
+  const unsubPersonal = onSnapshot(
+    query(
+      collection(db, 'notifications'),
+      where('targetType', '==', 'customer'),
+      where('recipientAuthUid', '==', authUid),
+    ),
+    (snap) => {
+      personalList = snapToArray<AppNotification>(snap);
+      emitMerged();
+    },
+    (err) => onError?.(err),
+  );
+
+  const unsubBroadcast = onSnapshot(
+    query(collection(db, 'notifications'), where('targetType', '==', 'broadcast')),
+    (snap) => {
+      broadcastList = snapToArray<AppNotification>(snap);
+      emitMerged();
+    },
+    (err) => onError?.(err),
+  );
+
+  return () => {
+    unsubPersonal();
+    unsubBroadcast();
+  };
+}
+
+export async function sendAdminManualNotificationFirebase(params: {
+  actorName: string;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  targetMode: 'broadcast' | 'selected';
+  targetCustomers: CustomerAccount[];
+}): Promise<number> {
+  const title = params.title.trim().slice(0, 160);
+  const message = params.message.trim().slice(0, 1000);
+  if (title.length < 2 || message.length < 3) {
+    throw new Error('Judul dan isi pesan notifikasi wajib diisi.');
+  }
+
+  if (params.targetMode === 'broadcast') {
+    const ntfId = makeId('ntf');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'notifications', ntfId), {
+      id: ntfId,
+      targetType: 'broadcast',
+      recipientCustomerId: '',
+      recipientAuthUid: '',
+      title,
+      message,
+      category: params.category,
+      senderName: params.actorName,
+      isRead: false,
+      createdAt: serverTimestamp(),
+    });
+    const audId = makeId('aud');
+    batch.set(doc(db, 'auditLogs', audId), {
+      id: audId,
+      actorName: params.actorName,
+      actorRole: 'Admin',
+      activityType: 'Pengaturan Sistem',
+      description: `Mengirim broadcast notifikasi (${params.category}): "${title}".`,
+      createdAt: serverTimestamp(),
+    });
+    await batch.commit();
+    return 1;
+  }
+
+  const validTargets = params.targetCustomers.filter((c) => Boolean(c.authUid));
+  if (validTargets.length === 0) {
+    throw new Error('Pilih minimal 1 pelanggan yang memiliki akun aktif.');
+  }
+
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < validTargets.length; i += CHUNK_SIZE) {
+    const chunk = validTargets.slice(i, i + CHUNK_SIZE);
+    const batch = writeBatch(db);
+    for (const cust of chunk) {
+      const ntfId = makeId('ntf');
+      batch.set(doc(db, 'notifications', ntfId), {
+        id: ntfId,
+        targetType: 'customer',
+        recipientCustomerId: cust.id,
+        recipientAuthUid: cust.authUid || '',
+        title,
+        message,
+        category: params.category,
+        senderName: params.actorName,
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+    }
+    if (i + CHUNK_SIZE >= validTargets.length) {
+      const audId = makeId('aud');
+      const preview = validTargets
+        .slice(0, 5)
+        .map((c) => c.id)
+        .join(', ');
+      batch.set(doc(db, 'auditLogs', audId), {
+        id: audId,
+        actorName: params.actorName,
+        actorRole: 'Admin',
+        activityType: 'Pengaturan Sistem',
+        description: `Mengirim notifikasi (${params.category}) "${title}" ke ${validTargets.length} pelanggan (${preview}${validTargets.length > 5 ? ', ...' : ''}).`,
+        createdAt: serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  return validTargets.length;
+}
+
+export async function markNotificationReadFirebase(
+  notificationId: string,
+  isRead = true,
+): Promise<void> {
+  await updateDoc(doc(db, 'notifications', notificationId), { isRead });
+}
+
+export async function markAllNotificationsReadFirebase(
+  notifications: AppNotification[],
+): Promise<void> {
+  const unread = notifications.filter((n) => !n.isRead && n.targetType !== 'broadcast');
+  if (unread.length === 0) return;
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < unread.length; i += CHUNK_SIZE) {
+    const batch = writeBatch(db);
+    for (const item of unread.slice(i, i + CHUNK_SIZE)) {
+      batch.update(doc(db, 'notifications', item.id), { isRead: true });
+    }
+    await batch.commit();
+  }
+}
+
+export async function deleteNotificationFirebase(notificationId: string): Promise<void> {
+  await deleteDoc(doc(db, 'notifications', notificationId));
+}
+

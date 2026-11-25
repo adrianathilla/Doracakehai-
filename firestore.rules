@@ -125,7 +125,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'productCode', 'isStampEligible', 'name', 'description', 'categoryId',
-          'price', 'promoPrice', 'stock', 'isAvailable', 'imageUrl', 'isActive',
+          'price', 'promoPrice', 'stock', 'soldCount', 'isAvailable', 'imageUrl', 'isActive',
           'isFavorite', 'isNewest', 'isBestSeller', 'variants', 'createdAt', 'updatedAt'
         ])
         && isStr(data.id, 1, 128)
@@ -137,6 +137,7 @@ service cloud.firestore {
         && isNum(data.price, 0, 100000000)
         && (data.promoPrice == null || isNum(data.promoPrice, 0, 100000000))
         && isNum(data.stock, 0, 1000000)
+        && isOptNum(data, 'soldCount', 0, 100000000)
         && data.isAvailable is bool
         && isStr(data.imageUrl, 0, 750000)
         && data.isActive is bool
@@ -533,6 +534,29 @@ service cloud.firestore {
       return settingId in ['public', 'websitePublished', 'websiteDraft', 'clubConfig']
         && data.keys().size() >= 3
         && data.keys().size() <= 80;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'id', 'targetType', 'recipientCustomerId', 'recipientAuthUid',
+          'title', 'message', 'category', 'senderName', 'isRead', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'targetType', 'recipientCustomerId', 'recipientAuthUid',
+          'title', 'message', 'category', 'senderName', 'orderNumber',
+          'isRead', 'createdAt'
+        ])
+        && isStr(data.id, 1, 128)
+        && data.targetType in ['admin', 'customer', 'broadcast']
+        && isStr(data.recipientCustomerId, 0, 64)
+        && isStr(data.recipientAuthUid, 0, 128)
+        && isStr(data.title, 1, 160)
+        && isStr(data.message, 1, 1000)
+        && data.category in ['Promo', 'Pesanan', 'Hadiah', 'Info Toko']
+        && isStr(data.senderName, 1, 120)
+        && isOptStr(data, 'orderNumber', 32)
+        && data.isRead is bool
+        && data.createdAt is timestamp;
     }
 
     // --- Health Probe ---
@@ -1055,6 +1079,68 @@ service cloud.firestore {
           (incoming().actorRole == 'Sistem' && incoming().activityType == 'Perubahan Pesanan')
         );
       allow update, delete: if false;
+    }
+
+    // --- Real-Time Notifications ---
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && (
+        isAdmin() ||
+        (
+          isCustomerAuth() && (
+            resource.data.targetType == 'broadcast' ||
+            (resource.data.targetType == 'customer' && resource.data.recipientAuthUid == request.auth.uid)
+          )
+        )
+      );
+      allow list: if isAdmin() || (
+        isCustomerAuth() && (
+          resource.data.targetType == 'broadcast' ||
+          (resource.data.targetType == 'customer' && resource.data.recipientAuthUid == request.auth.uid)
+        )
+      );
+      allow create: if isValidId(notificationId)
+        && isValidNotification(incoming())
+        && incoming().createdAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isCustomerAuth()
+            && incoming().isRead == false
+            && (
+              (
+                incoming().targetType == 'admin'
+                && incoming().recipientCustomerId == ''
+                && incoming().recipientAuthUid == ''
+              ) ||
+              (
+                incoming().targetType == 'customer'
+                && incoming().recipientAuthUid == request.auth.uid
+              )
+            )
+          ) ||
+          (
+            incoming().targetType == 'admin'
+            && incoming().category == 'Pesanan'
+            && incoming().recipientCustomerId == ''
+            && incoming().recipientAuthUid == ''
+            && incoming().isRead == false
+            && incoming().orderNumber is string
+            && incoming().orderNumber.matches('^DC-[0-9]{8}-[0-9]{4}$')
+          )
+        );
+      allow update: if isValidId(notificationId)
+        && isValidNotification(incoming())
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin() ||
+          (
+            isCustomerAuth()
+            && existing().targetType == 'customer'
+            && existing().recipientAuthUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          )
+        );
+      allow delete: if isValidId(notificationId) && isAdmin();
     }
   }
 }

@@ -19,6 +19,7 @@ import {
   buildForgotPasswordWaLink,
 } from '../utils/format';
 import { ResilientImage } from './ResilientImage';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface CustomerEntryGateProps {
   logoUrl: string;
@@ -120,14 +121,17 @@ export const CustomerEntryGate: React.FC<CustomerEntryGateProps> = ({
             <Sparkles className="h-3.5 w-3.5 text-[#D46282]" />
             <span>DoraCake Bakery &amp; Pastry · Customer Club</span>
           </span>
-          <button
-            type="button"
-            onClick={onOpenAdminLogin}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#3B2316] px-3 py-1 text-[11px] font-semibold text-[#FBF6EE] hover:bg-[#4F3020] whitespace-nowrap"
-          >
-            <ShieldCheck className="h-3.5 w-3.5 text-[#E7CFA2]" />
-            <span>Portal Admin</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <PWAInstallButton />
+            <button
+              type="button"
+              onClick={onOpenAdminLogin}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#3B2316] px-3 py-1 text-[11px] font-semibold text-[#FBF6EE] hover:bg-[#4F3020] whitespace-nowrap"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-[#E7CFA2]" />
+              <span>Portal Admin</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -256,7 +260,11 @@ export const CustomerEntryGate: React.FC<CustomerEntryGateProps> = ({
                   </button>
                 </div>
 
-                <p className="mt-5 text-[11px] leading-relaxed text-[#6E5849]">
+                <div className="mt-4">
+                  <PWAInstallButton variant="card" />
+                </div>
+
+                <p className="mt-4 text-[11px] leading-relaxed text-[#6E5849]">
                   Pendaftaran akun dilakukan oleh Admin toko untuk menjaga keakuratan data member, poin, dan stempel.
                 </p>
               </div>

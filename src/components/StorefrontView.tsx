@@ -34,6 +34,8 @@ interface StorefrontViewProps {
   onOpenAdmin: () => void;
   activeCustomer?: CustomerAccount | null;
   onOpenMemberClub?: () => void;
+  unreadNotifCount?: number;
+  onOpenNotifications?: () => void;
   activeCampaigns?: PromoCampaign[];
   isLoading: boolean;
   errorMsg?: string | null;
@@ -60,6 +62,8 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({
   onOpenAdmin,
   activeCustomer,
   onOpenMemberClub,
+  unreadNotifCount = 0,
+  onOpenNotifications,
   activeCampaigns = [],
   isLoading,
   errorMsg,
@@ -97,6 +101,8 @@ export const StorefrontView: React.FC<StorefrontViewProps> = ({
         onOpenAdmin={onOpenAdmin}
         activeCustomer={activeCustomer}
         onOpenMemberClub={onOpenMemberClub}
+        unreadNotifCount={unreadNotifCount}
+        onOpenNotifications={onOpenNotifications}
         isPreview={isPreview}
       />
 

@@ -59,6 +59,7 @@
         "price": { "type": "number" },
         "promoPrice": { "type": "number" },
         "stock": { "type": "number" },
+        "soldCount": { "type": "number" },
         "isAvailable": { "type": "boolean" },
         "imageUrl": { "type": "string", "maxLength": 750000 },
         "isActive": { "type": "boolean" },
@@ -439,6 +440,25 @@
       "title": "SettingsDoc",
       "description": "Configuration documents (public, websitePublished, websiteDraft, clubConfig).",
       "type": "object"
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "Real-time notification for admin, individual customer, or customer broadcast.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "targetType": { "type": "string", "enum": ["admin", "customer", "broadcast"] },
+        "recipientCustomerId": { "type": "string", "maxLength": 64 },
+        "recipientAuthUid": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 160 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "enum": ["Promo", "Pesanan", "Hadiah", "Info Toko"] },
+        "senderName": { "type": "string", "maxLength": 120 },
+        "orderNumber": { "type": "string", "maxLength": 32 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "targetType", "recipientCustomerId", "recipientAuthUid", "title", "message", "category", "senderName", "isRead", "createdAt"]
     }
   },
   "firestore": {
@@ -541,6 +561,10 @@
     "/auditLogs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLogEntry" },
       "description": "Customer Club audit logs."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "Real-time notifications for customers and store admins."
     }
   }
 }

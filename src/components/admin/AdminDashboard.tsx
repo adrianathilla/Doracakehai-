@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
   BarChart3,
+  Bell,
   ChefHat,
   ClipboardList,
   Clock,
@@ -26,9 +27,11 @@ import {
   TicketPercent,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 import {
   AdminUserPublic,
+  AppNotification,
   FirebaseRuntimeStatus,
 } from '../../types';
 import {
@@ -38,10 +41,14 @@ import {
 import { DEFAULT_CLUB_CONFIG } from '../../services/clubStore';
 import {
   AdminFullSyncState,
+  markAllNotificationsReadFirebase,
+  markNotificationReadFirebase,
   signOutAll,
   subscribeAdminData,
 } from '../../services/firebaseService';
 import { formatRupiah, getOrderStatusBadge } from '../../utils/format';
+import { showDeviceNotification } from '../../utils/webNotifications';
+import { NotificationBellModal } from '../NotificationBellModal';
 import { ResilientImage } from '../ResilientImage';
 import { AdminOrdersTab } from './AdminOrdersTab';
 import { AdminProductsTab } from './AdminProductsTab';
@@ -54,11 +61,13 @@ import { AdminCustomersTab } from './AdminCustomersTab';
 import { AdminClubRewardsTab } from './AdminClubRewardsTab';
 import { AdminMarketingAndReportsTab } from './AdminMarketingAndReportsTab';
 import { AdminSecurityAndAuditTab } from './AdminSecurityAndAuditTab';
+import { AdminNotificationsTab } from './AdminNotificationsTab';
 
 export type AdminNavTab =
   | 'overview'
   | 'products'
   | 'orders'
+  | 'notifications'
   | 'customers'
   | 'add_customer'
   | 'points'
@@ -113,6 +122,7 @@ const INITIAL_ADMIN_STATE: AdminFullSyncState = {
   clubConfig: DEFAULT_CLUB_CONFIG,
   adminUsers: [],
   adminInvites: [],
+  notifications: [],
 };
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -132,6 +142,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [lastSyncedAt, setLastSyncedAt] = useState<string>(new Date().toISOString());
   const [openCreateProduct, setOpenCreateProduct] = useState(false);
   const [selectedOrderIdForTab, setSelectedOrderIdForTab] = useState<string | null>(null);
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [toastNotif, setToastNotif] = useState<AppNotification | null>(null);
+  const mountedAtRef = useRef<number>(Date.now());
+  const seenAdminNotifIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -150,12 +164,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => unsub();
   }, []);
 
+  const adminInboxNotifications = useMemo(
+    () =>
+      adminData.notifications
+        .filter((n) => n.targetType === 'admin')
+        .map((n) => ({ ...n, effectiveRead: n.isRead })),
+    [adminData.notifications],
+  );
+
+  const unreadAdminNotifCount = useMemo(
+    () => adminInboxNotifications.filter((n) => !n.isRead).length,
+    [adminInboxNotifications],
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    const inbox = adminData.notifications.filter((n) => n.targetType === 'admin');
+    const newlyArrived = inbox.filter((n) => {
+      if (seenAdminNotifIdsRef.current.has(n.id)) return false;
+      const createdMs = new Date(n.createdAt).getTime();
+      return !n.isRead && createdMs >= mountedAtRef.current - 5_000;
+    });
+    inbox.forEach((n) => seenAdminNotifIdsRef.current.add(n.id));
+    if (newlyArrived.length > 0) {
+      const latest = newlyArrived[0];
+      setToastNotif(latest);
+      void showDeviceNotification({
+        title: latest.title,
+        body: latest.message,
+        tag: `admin-${latest.id}`,
+      });
+    }
+  }, [adminData.notifications, loading]);
+
   const handleLogout = async () => {
     await signOutAll().catch(() => {});
     await onLoggedOut();
   };
 
-  // All 15 Admin Menu Items
+  // All 16 Admin Menu Items
   const navGroups: {
     groupLabel: string;
     items: { id: AdminNavTab; label: string; icon: React.ReactNode; badge?: number }[];
@@ -166,6 +213,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         { id: 'overview', label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
         { id: 'products', label: 'Produk', icon: <Package className="h-4 w-4" /> },
         { id: 'orders', label: 'Pesanan', icon: <ClipboardList className="h-4 w-4" /> },
+        {
+          id: 'notifications',
+          label: 'Notifikasi & Up Promo',
+          icon: <Bell className="h-4 w-4" />,
+          badge: unreadAdminNotifCount,
+        },
       ],
     },
     {
@@ -385,14 +438,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {brandName} Admin
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onExitToStorefront}
-            className="rounded-xl border border-[#E6D8C5] bg-[#FBF6EE] px-3 py-1.5 text-xs font-semibold text-[#3B2316]"
-          >
-            Lihat Website
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setNotifModalOpen(true)}
+              className="relative rounded-xl border border-[#E6D8C5] bg-[#FBF6EE] p-2 text-[#3B2316]"
+              aria-label="Notifikasi Admin"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadAdminNotifCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#8E2E49] px-1 text-[9px] font-bold text-white">
+                  {unreadAdminNotifCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onExitToStorefront}
+              className="rounded-xl border border-[#E6D8C5] bg-[#FBF6EE] px-3 py-1.5 text-xs font-semibold text-[#3B2316]"
+            >
+              Lihat Website
+            </button>
+          </div>
         </header>
+
+        {/* Desktop quick notification bar */}
+        <div className="hidden items-center justify-between border-b border-[#E6D8C5] bg-[#FFFDF9] px-8 py-2.5 lg:flex no-print">
+          <p className="text-xs text-[#6E5849]">
+            Panel Operasional <strong className="text-[#2C1810]">{brandName}</strong> · Sinkronisasi real-time aktif
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('notifications')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#EAB8C6] bg-[#FDF2F5] px-3 py-1.5 text-xs font-semibold text-[#8E2E49] hover:bg-[#FCE6EC]"
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+              <span>Up Notifikasi Pelanggan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotifModalOpen(true)}
+              className="relative inline-flex items-center gap-1.5 rounded-xl border border-[#E6D8C5] bg-[#FBF6EE] px-3 py-1.5 text-xs font-semibold text-[#3B2316] hover:bg-[#F3E9D8]"
+            >
+              <Bell className="h-3.5 w-3.5 text-[#8E2E49]" />
+              <span>Notifikasi</span>
+              {unreadAdminNotifCount > 0 && (
+                <span className="rounded bg-[#8E2E49] px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums">
+                  {unreadAdminNotifCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
 
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
           {syncError && (
@@ -419,6 +517,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('notifications')}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[#EAB8C6] bg-[#FDF2F5] px-4 py-2.5 text-xs font-semibold text-[#8E2E49] shadow-sm hover:bg-[#FCE6EC] whitespace-nowrap"
+                  >
+                    <Megaphone className="h-4 w-4" />
+                    <span>Up Notifikasi</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('add_customer')}
@@ -687,6 +793,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               settings={adminData.settings}
               initialSelectedOrderId={selectedOrderIdForTab}
             />
+          ) : activeTab === 'notifications' ? (
+            <AdminNotificationsTab
+              actorName={currentAdmin.name}
+              notifications={adminData.notifications}
+              customers={adminData.customers}
+            />
           ) : activeTab === 'customers' || activeTab === 'add_customer' ? (
             <AdminCustomersTab
               key={activeTab}
@@ -819,6 +931,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
         </main>
       </div>
+
+      {/* Live In-App Admin Toast Notification */}
+      {toastNotif && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-2xl border border-[#EAB8C6] bg-[#FFFDF9] p-4 shadow-xl no-print">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#FDF2F5] text-[#8E2E49]">
+                <Bell className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E2E49]">
+                  {toastNotif.category} Baru
+                </span>
+                <p className="text-sm font-bold text-[#2C1810]">{toastNotif.title}</p>
+                <p className="mt-0.5 text-xs text-[#5C4435] line-clamp-2">{toastNotif.message}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToastNotif(null)}
+              className="rounded-lg p-1 text-[#6E5849] hover:bg-[#FBF6EE]"
+              aria-label="Tutup peringatan notifikasi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-2.5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setToastNotif(null);
+                setNotifModalOpen(true);
+              }}
+              className="rounded-lg bg-[#8E2E49] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#75233A]"
+            >
+              Lihat Notifikasi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Notification Drawer Modal */}
+      <NotificationBellModal
+        isOpen={notifModalOpen}
+        title="Notifikasi Admin"
+        notifications={adminInboxNotifications}
+        unreadCount={unreadAdminNotifCount}
+        onClose={() => setNotifModalOpen(false)}
+        onMarkRead={(notif) => {
+          void markNotificationReadFirebase(notif.id, true);
+        }}
+        onMarkAllRead={() => {
+          void markAllNotificationsReadFirebase(adminInboxNotifications);
+        }}
+      />
     </div>
   );
 };

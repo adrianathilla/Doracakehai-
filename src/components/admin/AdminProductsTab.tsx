@@ -24,6 +24,7 @@ interface ProductFormState {
   price: string;
   promoPrice: string;
   stock: string;
+  soldCount: string;
   isAvailable: boolean;
   imageUrl: string;
   isActive: boolean;
@@ -44,6 +45,7 @@ const emptyForm = (defaultCatId: string): ProductFormState => ({
   price: '',
   promoPrice: '',
   stock: '10',
+  soldCount: '0',
   isAvailable: true,
   imageUrl: '',
   isActive: true,
@@ -89,6 +91,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
       price: String(product.price),
       promoPrice: product.promoPrice ? String(product.promoPrice) : '',
       stock: String(product.stock),
+      soldCount: String(Math.max(0, Math.round(Number(product.soldCount) || 0))),
       isAvailable: product.isAvailable,
       imageUrl: product.imageUrl,
       isActive: product.isActive,
@@ -172,6 +175,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
     const priceNum = Number(form.price);
     const promoNum = form.promoPrice.trim() ? Number(form.promoPrice) : null;
     const stockNum = Number(form.stock);
+    const soldNum = Number(form.soldCount);
 
     if (form.name.trim().length < 2) {
       setErrorMsg('Nama produk minimal 2 karakter.');
@@ -197,6 +201,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
         price: priceNum,
         promoPrice: promoNum,
         stock: Number.isFinite(stockNum) ? Math.max(0, stockNum) : 0,
+        soldCount: Number.isFinite(soldNum) ? Math.max(0, Math.round(soldNum)) : 0,
         isAvailable: form.isAvailable,
         imageUrl: form.imageUrl.trim(),
         isActive: form.isActive,
@@ -387,7 +392,8 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
                       </span>
                     )}
                     <span className="ml-auto text-xs text-[#6E5849] tabular-nums">
-                      Stok: {product.stock}
+                      Stok: {product.stock} · Terjual{' '}
+                      {(product.soldCount ?? 0).toLocaleString('id-ID')}
                     </span>
                   </div>
                 </div>
@@ -524,7 +530,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-5">
                 <div>
                   <label className="block text-xs font-semibold text-[#3B2316]">
                     Harga Normal (Rp) *
@@ -540,7 +546,7 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-[#3B2316]">
-                    Harga Promo (Opsional)
+                    Harga Promo
                   </label>
                   <input
                     type="number"
@@ -563,8 +569,21 @@ export const AdminProductsTab: React.FC<AdminProductsTabProps> = ({
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-semibold text-[#8E2E49]">
+                    Terjual (Item)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.soldCount}
+                    onChange={(e) => setForm((p) => ({ ...p, soldCount: e.target.value }))}
+                    placeholder="0"
+                    className="mt-1.5 w-full rounded-xl border border-[#EAB8C6] bg-[#FDF2F5] px-3.5 py-2.5 text-sm font-semibold text-[#2C1810] tabular-nums"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-semibold text-[#3B2316]">
-                    Status Ketersediaan
+                    Ketersediaan
                   </label>
                   <select
                     value={form.isAvailable ? 'available' : 'soldout'}

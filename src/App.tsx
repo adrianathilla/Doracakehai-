@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, X } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   AdminUserPublic,
+  AppNotification,
   CartItem,
   Category,
   ClubConfig,
@@ -36,6 +38,8 @@ import {
   completeCustomerFirstPassword,
   createOrderFirebase,
   loginCustomerWithUsername,
+  markAllNotificationsReadFirebase,
+  markNotificationReadFirebase,
   recordProductShareClickFirebase,
   recordReferralClickFirebase,
   redeemPointRewardFirebase,
@@ -43,9 +47,13 @@ import {
   resolveAuthenticatedUser,
   signOutAll,
   subscribeCustomerClubData,
+  subscribeCustomerNotifications,
   subscribeStorefront,
 } from './services/firebaseService';
+import { initPWAServiceWorker, showDeviceNotification } from './utils/webNotifications';
 import { PrototypeModeBanner } from './components/PrototypeModeBanner';
+import { OfflineIndicator } from './components/OfflineIndicator';
+import { NotificationBellModal } from './components/NotificationBellModal';
 import { CustomerEntryGate } from './components/CustomerEntryGate';
 import {
   CustomerDashboardView,
@@ -63,6 +71,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 
 const CART_STORAGE_KEY = 'doracake_cart_v1';
 const RECENT_ORDERS_KEY = 'doracake_recent_orders_v1';
+const getReadBroadcastsKey = (customerId: string) => `doracake_read_broadcasts_${customerId}`;
 
 type AppMode = 'entry' | 'guest' | 'customer' | 'admin';
 
@@ -96,6 +105,10 @@ export default function App() {
   const [custStampHistory, setCustStampHistory] = useState<StampHistoryItem[]>([]);
   const [custPersonalVouchers, setCustPersonalVouchers] = useState<Voucher[]>([]);
   const [custReferrals, setCustReferrals] = useState<ReferralRecord[]>([]);
+  const [rawCustomerNotifs, setRawCustomerNotifs] = useState<AppNotification[]>([]);
+  const [readBroadcastIds, setReadBroadcastIds] = useState<string[]>([]);
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [custToastNotif, setCustToastNotif] = useState<AppNotification | null>(null);
 
   // Admin Session State
   const [adminLoginOpen, setAdminLoginOpen] = useState(false);
@@ -157,6 +170,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshFirebaseStatus();
+    initPWAServiceWorker();
   }, [refreshFirebaseStatus]);
 
   // Subscribe to Public Storefront Collections
@@ -202,6 +216,8 @@ export default function App() {
         setCustStampHistory([]);
         setCustPersonalVouchers([]);
         setCustReferrals([]);
+        setRawCustomerNotifs([]);
+        setReadBroadcastIds([]);
         setAppMode((prev) => (prev === 'admin' || prev === 'customer' ? 'entry' : prev));
         return;
       }
@@ -242,6 +258,62 @@ export default function App() {
       if (partial.personalVouchers !== undefined) setCustPersonalVouchers(partial.personalVouchers);
       if (partial.referrals !== undefined) setCustReferrals(partial.referrals);
     });
+    return () => unsub();
+  }, [authUid, activeCustomer?.id]);
+
+  // Load Read Broadcast IDs & Subscribe to Customer Real-Time Notifications
+  useEffect(() => {
+    if (!authUid || !activeCustomer?.id) {
+      setRawCustomerNotifs([]);
+      setReadBroadcastIds([]);
+      return;
+    }
+
+    const storageKey = getReadBroadcastsKey(activeCustomer.id);
+    let initialReadBroadcasts: string[] = [];
+    try {
+      const saved = localStorage.getItem(storageKey);
+      initialReadBroadcasts = saved ? (JSON.parse(saved) as string[]) : [];
+    } catch {
+      initialReadBroadcasts = [];
+    }
+    setReadBroadcastIds(initialReadBroadcasts);
+
+    const subscriptionStartedAt = Date.now();
+    const seenIds = new Set<string>();
+
+    const unsub = subscribeCustomerNotifications(authUid, (notifs) => {
+      setRawCustomerNotifs(notifs);
+      let latestReadIds = initialReadBroadcasts;
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) latestReadIds = JSON.parse(raw) as string[];
+      } catch {
+        // ignore storage read error
+      }
+
+      const newlyArrived = notifs.filter((n) => {
+        if (seenIds.has(n.id)) return false;
+        const createdMs = new Date(n.createdAt).getTime();
+        const isFresh = createdMs >= subscriptionStartedAt - 5_000;
+        const alreadyRead =
+          n.targetType === 'broadcast' ? latestReadIds.includes(n.id) : n.isRead;
+        return isFresh && !alreadyRead;
+      });
+
+      notifs.forEach((n) => seenIds.add(n.id));
+
+      if (newlyArrived.length > 0) {
+        const latest = newlyArrived[0];
+        setCustToastNotif(latest);
+        void showDeviceNotification({
+          title: latest.title,
+          body: latest.message,
+          tag: `cust-${latest.id}`,
+        });
+      }
+    });
+
     return () => unsub();
   }, [authUid, activeCustomer?.id]);
 
@@ -314,6 +386,64 @@ export default function App() {
     return [...map.values()];
   }, [custPersonalVouchers, publicVouchers]);
 
+  // Customer Notification View Models
+  const mergedCustomerNotifications = useMemo(
+    () =>
+      rawCustomerNotifs.map((n) => ({
+        ...n,
+        effectiveRead:
+          n.targetType === 'broadcast' ? readBroadcastIds.includes(n.id) : n.isRead,
+      })),
+    [rawCustomerNotifs, readBroadcastIds],
+  );
+
+  const unreadCustomerNotifCount = useMemo(
+    () => mergedCustomerNotifications.filter((n) => !n.effectiveRead).length,
+    [mergedCustomerNotifications],
+  );
+
+  const handleMarkCustomerNotifRead = (notif: AppNotification) => {
+    if (!activeCustomer) return;
+    if (notif.targetType === 'broadcast') {
+      setReadBroadcastIds((prev) => {
+        if (prev.includes(notif.id)) return prev;
+        const next = [...prev, notif.id];
+        try {
+          localStorage.setItem(getReadBroadcastsKey(activeCustomer.id), JSON.stringify(next));
+        } catch {
+          // ignore storage quota
+        }
+        return next;
+      });
+    } else {
+      void markNotificationReadFirebase(notif.id, true);
+    }
+  };
+
+  const handleMarkAllCustomerNotifsRead = () => {
+    if (!activeCustomer) return;
+    const broadcastIds = rawCustomerNotifs
+      .filter((n) => n.targetType === 'broadcast')
+      .map((n) => n.id);
+    if (broadcastIds.length > 0) {
+      setReadBroadcastIds((prev) => {
+        const next = [...new Set([...prev, ...broadcastIds])];
+        try {
+          localStorage.setItem(getReadBroadcastsKey(activeCustomer.id), JSON.stringify(next));
+        } catch {
+          // ignore storage quota
+        }
+        return next;
+      });
+    }
+    const personalNotifs = rawCustomerNotifs.filter(
+      (n) => n.targetType === 'customer' && !n.isRead,
+    );
+    if (personalNotifs.length > 0) {
+      void markAllNotificationsReadFirebase(personalNotifs);
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     const queryStr = searchQuery.trim().toLowerCase();
     const list = products.filter((p) => {
@@ -338,7 +468,12 @@ export default function App() {
       if (sortBy === 'price_asc') return getEffectivePrice(a) - getEffectivePrice(b);
       if (sortBy === 'price_desc') return getEffectivePrice(b) - getEffectivePrice(a);
       if (sortBy === 'newest') return b.createdAt.localeCompare(a.createdAt);
-      if (sortBy === 'bestseller') return Number(b.isBestSeller) - Number(a.isBestSeller);
+      if (sortBy === 'bestseller') {
+        return (
+          Number(b.isBestSeller) - Number(a.isBestSeller) ||
+          (b.soldCount ?? 0) - (a.soldCount ?? 0)
+        );
+      }
       const scoreA = (a.isFavorite ? 2 : 0) + (a.isBestSeller ? 1 : 0);
       const scoreB = (b.isFavorite ? 2 : 0) + (b.isBestSeller ? 1 : 0);
       if (scoreB !== scoreA) return scoreB - scoreA;
@@ -527,6 +662,10 @@ export default function App() {
       onOpenAdmin={handleOpenAdminButton}
       activeCustomer={customActiveCustomer}
       activeCampaigns={campaigns}
+      unreadNotifCount={customActiveCustomer ? unreadCustomerNotifCount : 0}
+      onOpenNotifications={
+        customActiveCustomer ? () => setNotifModalOpen(true) : undefined
+      }
       onOpenMemberClub={() => {
         if (customActiveCustomer && !customActiveCustomer.mustChangePassword) {
           setCustomerTab('beranda');
@@ -542,6 +681,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F6EFE4] text-[#2C1810]">
+      <OfflineIndicator />
       <PrototypeModeBanner
         mode={appMode}
         activeCustomer={activeCustomer}
@@ -606,6 +746,8 @@ export default function App() {
           settings={effectiveSettings}
           logoUrl={website.logoUrl}
           cartCount={cartCount}
+          unreadNotifCount={unreadCustomerNotifCount}
+          onOpenNotifications={() => setNotifModalOpen(true)}
           onOpenCart={() => setCartOpen(true)}
           onOpenTracking={() => setTrackingOpen(true)}
           onLogout={async () => {
@@ -767,6 +909,61 @@ export default function App() {
           setAppMode('admin');
         }}
       />
+
+      {/* Live In-App Customer Toast Notification */}
+      {custToastNotif && appMode !== 'admin' && activeCustomer && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-2xl border border-[#EAB8C6] bg-[#FFFDF9] p-4 shadow-xl no-print">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#FDF2F5] text-[#8E2E49]">
+                <Bell className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E2E49]">
+                  {custToastNotif.category} DoraCake
+                </span>
+                <p className="text-sm font-bold text-[#2C1810]">{custToastNotif.title}</p>
+                <p className="mt-0.5 text-xs text-[#5C4435] line-clamp-2">
+                  {custToastNotif.message}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCustToastNotif(null)}
+              className="rounded-lg p-1 text-[#6E5849] hover:bg-[#FBF6EE]"
+              aria-label="Tutup peringatan notifikasi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-2.5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setCustToastNotif(null);
+                setNotifModalOpen(true);
+              }}
+              className="rounded-lg bg-[#8E2E49] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#75233A]"
+            >
+              Buka Notifikasi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Notification Center Modal */}
+      {activeCustomer && (
+        <NotificationBellModal
+          isOpen={notifModalOpen}
+          title="Notifikasi DoraCake"
+          notifications={mergedCustomerNotifications}
+          unreadCount={unreadCustomerNotifCount}
+          onClose={() => setNotifModalOpen(false)}
+          onMarkRead={handleMarkCustomerNotifRead}
+          onMarkAllRead={handleMarkAllCustomerNotifsRead}
+        />
+      )}
     </div>
   );
 }

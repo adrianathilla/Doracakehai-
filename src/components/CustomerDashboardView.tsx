@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Award,
+  Bell,
   Check,
   CheckCircle2,
   Coins,
@@ -44,6 +45,7 @@ import {
   getPaymentStatusBadge,
 } from '../utils/format';
 import { ResilientImage } from './ResilientImage';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export type CustomerNavTab =
   | 'beranda'
@@ -73,6 +75,8 @@ interface CustomerDashboardViewProps {
   settings: StoreSettings;
   logoUrl: string;
   cartCount: number;
+  unreadNotifCount: number;
+  onOpenNotifications: () => void;
   onOpenCart: () => void;
   onOpenTracking: () => void;
   onLogout: () => void;
@@ -106,6 +110,8 @@ export const CustomerDashboardView: React.FC<CustomerDashboardViewProps> = ({
   settings,
   logoUrl,
   cartCount,
+  unreadNotifCount,
+  onOpenNotifications,
   onOpenCart,
   onLogout,
   onRedeemPointReward,
@@ -280,6 +286,19 @@ export const CustomerDashboardView: React.FC<CustomerDashboardViewProps> = ({
               ))}
             </div>
             <div className="flex items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={onOpenNotifications}
+                className="relative inline-flex items-center gap-1 rounded-lg border border-[#EAB8C6] bg-[#FDF2F5] px-2.5 py-1 font-semibold text-[#8E2E49] hover:bg-[#FCE6EC]"
+              >
+                <Bell className="h-3.5 w-3.5" />
+                <span>Notif</span>
+                {unreadNotifCount > 0 && (
+                  <span className="rounded-full bg-[#8E2E49] px-1.5 py-0.2 text-[10px] font-bold text-white tabular-nums">
+                    {unreadNotifCount}
+                  </span>
+                )}
+              </button>
               <span className="font-mono-tabular rounded-lg border border-[#EAB8C6] bg-[#FDF2F5] px-2.5 py-1 font-semibold text-[#8E2E49]">
                 {customer.points} Poin · {customer.stamps}/{stampTarget} Stempel
               </span>
@@ -311,6 +330,21 @@ export const CustomerDashboardView: React.FC<CustomerDashboardViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onOpenNotifications}
+              className="relative inline-flex items-center gap-1.5 rounded-xl border border-[#EAB8C6] bg-[#FDF2F5] px-3 py-2 text-xs font-semibold text-[#8E2E49] hover:bg-[#FCE6EC] whitespace-nowrap"
+              aria-label="Pusat Notifikasi"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Notifikasi</span>
+              {unreadNotifCount > 0 && (
+                <span className="rounded-full bg-[#8E2E49] px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums">
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                </span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => onTabChange('belanja')}
@@ -457,6 +491,7 @@ export const CustomerDashboardView: React.FC<CustomerDashboardViewProps> = ({
           {/* TAB 1: BERANDA */}
           {activeTab === 'beranda' && (
             <div className="space-y-6">
+              <PWAInstallButton variant="card" />
               {/* Member Welcome Card */}
               <div className="rounded-2xl border border-[#E6D8C5] bg-[#FFFDF9] p-6 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1374,6 +1409,9 @@ export const CustomerDashboardView: React.FC<CustomerDashboardViewProps> = ({
                       </p>
                     </div>
                   ))}
+                </div>
+                <div className="mt-5">
+                  <PWAInstallButton variant="card" />
                 </div>
               </div>
 

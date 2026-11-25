@@ -301,18 +301,19 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                       {product.name}
                     </h3>
 
-                    {(product.productCode || product.isStampEligible !== false) && (
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-[#6E5849]">
-                        {product.productCode && (
-                          <span className="font-mono-tabular font-semibold text-[#8E2E49]">
-                            #{product.productCode}
-                          </span>
-                        )}
-                        {product.isStampEligible !== false && (
-                          <span>· Berhadiah Stempel</span>
-                        )}
-                      </div>
-                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#6E5849]">
+                      {product.productCode && (
+                        <span className="font-mono-tabular font-semibold text-[#8E2E49]">
+                          #{product.productCode}
+                        </span>
+                      )}
+                      {product.isStampEligible !== false && (
+                        <span>{product.productCode ? '· ' : ''}Berhadiah Stempel</span>
+                      )}
+                      <span className="font-mono-tabular font-medium text-[#5C4435]">
+                        · Terjual {(product.soldCount ?? 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
 
                     {website.showProductDescription && product.description && (
                       <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed opacity-80">

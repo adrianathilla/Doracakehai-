@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Crown, Menu, PackageSearch, Search, ShieldCheck, ShoppingBag, X } from 'lucide-react';
+import { Bell, Crown, Menu, PackageSearch, Search, ShieldCheck, ShoppingBag, X } from 'lucide-react';
 import { CustomerAccount, HeaderNavKey, WebsiteContentConfig } from '../types';
 import { ResilientImage } from './ResilientImage';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface CustomerHeaderProps {
   website: WebsiteContentConfig;
@@ -13,6 +14,8 @@ interface CustomerHeaderProps {
   onOpenAdmin: () => void;
   activeCustomer?: CustomerAccount | null;
   onOpenMemberClub?: () => void;
+  unreadNotifCount?: number;
+  onOpenNotifications?: () => void;
   isPreview?: boolean;
 }
 
@@ -26,6 +29,8 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({
   onOpenAdmin,
   activeCustomer,
   onOpenMemberClub,
+  unreadNotifCount = 0,
+  onOpenNotifications,
   isPreview = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -152,6 +157,23 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({
 
         {/* Right: Ordered Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {!isPreview && <PWAInstallButton className="hidden md:inline-flex" />}
+          {!isPreview && activeCustomer && onOpenNotifications && (
+            <button
+              type="button"
+              onClick={onOpenNotifications}
+              className="relative inline-flex items-center justify-center rounded-xl border border-[#EAB8C6] bg-[#FDF2F5] p-2 text-[#8E2E49] transition-colors hover:bg-[#FCE7EE]"
+              aria-label="Buka notifikasi"
+              title="Notifikasi Akun"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadNotifCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-[#8E2E49] px-1 text-[10px] font-bold text-white tabular-nums">
+                  {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                </span>
+              )}
+            </button>
+          )}
           {!isPreview && onOpenMemberClub && (
             <button
               type="button"
@@ -195,6 +217,7 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
+            {!isPreview && <PWAInstallButton className="flex-1 justify-center py-2.5" />}
             {!isPreview && onOpenMemberClub && (
               <button
                 type="button"

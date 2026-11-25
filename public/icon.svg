@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#2C1810" />
+  <circle cx="256" cy="256" r="196" fill="#F6EFE4" />
+  <circle cx="256" cy="256" r="174" fill="none" stroke="#C89D54" stroke-width="6" />
+  <!-- Cake Base -->
+  <path d="M156 266 C156 246 172 232 192 232 L320 232 C340 232 356 246 356 266 L356 324 C356 338 344 350 330 350 L182 350 C168 350 156 338 156 324 Z" fill="#8E2E49" />
+  <!-- Cream Drip Frosting -->
+  <path d="M152 248 C152 224 172 208 198 208 L314 208 C340 208 360 224 360 248 L360 264 C360 274 348 282 338 274 C328 266 318 286 304 286 C290 286 280 268 268 276 C256 284 244 284 232 276 C220 268 210 286 196 286 C182 286 172 266 162 274 C154 280 152 272 152 264 Z" fill="#FFFDF9" stroke="#C89D54" stroke-width="4" />
+  <!-- Gold Crown / Berry Accent -->
+  <path d="M214 196 L224 150 L256 174 L288 150 L298 196 Z" fill="#C89D54" />
+  <circle cx="256" cy="142" r="12" fill="#8E2E49" />
+  <circle cx="222" cy="144" r="9" fill="#C89D54" />
+  <circle cx="290" cy="144" r="9" fill="#C89D54" />
+  <!-- Plate Line -->
+  <rect x="136" y="352" width="240" height="14" rx="7" fill="#3B2316" />
+</svg>
